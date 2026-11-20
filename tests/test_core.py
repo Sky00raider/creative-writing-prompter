@@ -49,3 +49,24 @@ def test_genre_corpora_are_clean():
         assert "CHAPTER" not in text, g
     with pytest.raises(ValueError):
         core.load_corpus("no-such-genre")
+
+
+# ---- Milestone 2: counts and maximum likelihood ---------------------------
+def test_counts(toy):
+    assert toy.counts[2][("the",)]["cat"] == 2
+    assert toy.counts[2][(core.BOS,)]["the"] == 3
+    assert toy.counts[1][()]["sat"] == 2
+
+
+def test_mle_is_count_ratio_and_zero_for_unseen(toy):
+    # "the" is followed by cat, cat, mat, dog, rug, dog
+    assert toy.mle(["the"], "cat") == pytest.approx(2 / 6)
+    assert toy.mle(["the"], "sat") == 0.0
+    assert sum(toy.mle(["the"], w) for w in toy.vocab) == pytest.approx(1.0)
+
+
+def test_trigram_uses_two_words_of_context():
+    m = core.NgramModel(n=3, min_count=1).fit(core.prepare(TOY))
+    assert m.mle("the cat", "sat") == pytest.approx(0.5)
+    assert m.mle("on the", "mat") == pytest.approx(0.5)
+    assert m.context("he left. the cat") == ("the", "cat")  # only the current sentence counts

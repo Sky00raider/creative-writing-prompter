@@ -79,3 +79,60 @@ def train_test_split(sents: list, test_frac: float = 0.1, seed: int = 0) -> tupl
 
 def _ended(text: str) -> bool:
     return not text.strip() or text.rstrip().rstrip("\"')").endswith(tuple(ENDS))
+
+
+# ---------------------------------------------------------------------------
+# Milestone 2: n-gram counting and maximum-likelihood probabilities.
+# Milestone 3: add-k smoothing for unseen n-grams.
+# ---------------------------------------------------------------------------
+class NgramModel:
+    """An order-n language model over word + punctuation tokens.
+
+    counts[m][context] is a Counter of the tokens that followed `context`
+    (a tuple of m-1 tokens), for every order m = 1..n, so the model can back
+    off to a shorter context when the full one was never seen.
+    """
+
+    def __init__(self, n: int = 3, k: float = 0.01, min_count: int = 2):
+        if n < 1:
+            raise ValueError("n must be >= 1")
+        self.n, self.k, self.min_count = n, k, min_count
+        self.sentences: list[list[str]] = []
+
+    # ---- training -------------------------------------------------------
+    def fit(self, sentences: list[list[str]]) -> "NgramModel":
+        freq = Counter(w for s in sentences for w in s)
+        self.vocab = {w for w, c in freq.items() if c >= self.min_count} | {EOS, UNK}
+        self.sentences = sentences
+        counts = {m: defaultdict(Counter) for m in range(1, self.n + 1)}
+        for sent in sentences:
+            toks = [BOS] * (self.n - 1) + [self._map(w) for w in sent] + [EOS]
+            for i in range(self.n - 1, len(toks)):
+                for m in range(1, self.n + 1):
+                    counts[m][tuple(toks[i - m + 1 : i])][toks[i]] += 1
+        self.counts = {m: dict(d) for m, d in counts.items()}
+        self.totals = {m: {c: sum(f.values()) for c, f in d.items()} for m, d in self.counts.items()}
+        return self
+
+    @property
+    def V(self) -> int:
+        return len(self.vocab)
+
+    def _map(self, w: str) -> str:
+        return w if w in self.vocab else UNK
+
+    def context(self, prefix, order: int | None = None) -> tuple:
+        """The last (order-1) tokens of a prefix (text or token list), padded with <s>.
+        Only the sentence currently being written counts as context."""
+        order = self.n if order is None else order
+        if isinstance(prefix, str):
+            sents = split_sentences(prefix)
+            prefix = [] if _ended(prefix) or not sents else tokenize(sents[-1])
+        toks = [BOS] * (self.n - 1) + [self._map(w) for w in prefix]
+        return tuple(toks[len(toks) - (order - 1) :]) if order > 1 else ()
+
+    def mle(self, prefix, word: str) -> float:
+        """Maximum likelihood: P(w | ctx) = count(ctx, w) / count(ctx). 0 for unseen."""
+        ctx = self.context(prefix)
+        total = self.totals[self.n].get(ctx, 0)
+        return self.counts[self.n][ctx][self._map(word)] / total if total else 0.0
