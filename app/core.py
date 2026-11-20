@@ -136,3 +136,62 @@ class NgramModel:
         ctx = self.context(prefix)
         total = self.totals[self.n].get(ctx, 0)
         return self.counts[self.n][ctx][self._map(word)] / total if total else 0.0
+
+    def prob(self, prefix, word: str, order: int | None = None) -> float:
+        """Add-k: P(w | ctx) = (count(ctx, w) + k) / (count(ctx) + k * V).
+        Never zero, and sums to 1 over the vocabulary for any context."""
+        order = self.n if order is None else order
+        ctx = self.context(prefix, order)
+        c = self.counts[order].get(ctx)
+        count = c[self._map(word)] if c else 0
+        return (count + self.k) / (self.totals[order].get(ctx, 0) + self.k * self.V)
+
+    def witten_bell(self, prefix, word: str, order: int | None = None) -> float:
+        """Interpolated Witten-Bell, for comparison: mixes order m with order m-1,
+        trusting the longer context more when few kinds of word have followed it."""
+        order = self.n if order is None else order
+        w = self._map(word)
+        if order == 1:
+            return (self.counts[1][()][w] + self.k) / (self.totals[1][()] + self.k * self.V)
+        lower = self.witten_bell(prefix, word, order - 1)
+        ctx = self.context(prefix, order)
+        c = self.counts[order].get(ctx)
+        if not c:
+            return lower
+        types = len(c)
+        return (c[w] + types * lower) / (self.totals[order][ctx] + types)
+
+    def best_order(self, prefix) -> int:
+        """Longest order whose context appears in training (n, else n-1, ... 1).
+        Add-k on an unseen context is uniform noise, so suggestions back off instead."""
+        for m in range(self.n, 0, -1):
+            if self.context(prefix, m) in self.counts[m]:
+                return m
+        return 1
+
+    def distribution(self, prefix, smoothing: str = "addk") -> tuple[dict[str, float], int]:
+        """Smoothed P(w | prefix) for every vocabulary word, and the order used."""
+        if smoothing == "witten-bell":
+            return {w: self.witten_bell(prefix, w) for w in self.vocab}, self.n
+        order = self.best_order(prefix)
+        ctx = self.context(prefix, order)
+        c = self.counts[order].get(ctx, Counter())
+        total = self.totals[order].get(ctx, 0)
+        if smoothing == "addk":
+            denom = total + self.k * self.V
+            return {w: (c[w] + self.k) / denom for w in self.vocab}, order
+        if smoothing == "mle":
+            return {w: c[w] / (total or 1) for w in self.vocab}, order
+        raise ValueError("smoothing must be addk, witten-bell or mle")
+
+    def perplexity(self, sentences: list[list[str]], smoothing: str = "addk") -> float:
+        """exp(-mean log P) over every token + end of sentence in held-out sentences.
+        Uses the full order-n context (no back-off) so the smoothing itself is measured."""
+        f = self.prob if smoothing == "addk" else self.witten_bell
+        log_sum, N = 0.0, 0
+        for sent in sentences:
+            seq = list(sent) + [EOS]
+            for i, w in enumerate(seq):
+                log_sum += math.log(f(seq[:i], w))
+                N += 1
+        return math.exp(-log_sum / max(N, 1))

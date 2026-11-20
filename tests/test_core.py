@@ -70,3 +70,33 @@ def test_trigram_uses_two_words_of_context():
     assert m.mle("the cat", "sat") == pytest.approx(0.5)
     assert m.mle("on the", "mat") == pytest.approx(0.5)
     assert m.context("he left. the cat") == ("the", "cat")  # only the current sentence counts
+
+
+# ---- Milestone 3: add-k smoothing ------------------------------------------
+def test_addk_formula_and_unseen_gets_mass(toy):
+    V = toy.V
+    assert toy.prob(["the"], "cat") == pytest.approx((2 + 0.5) / (6 + 0.5 * V))
+    assert toy.prob(["the"], "sat") == pytest.approx(0.5 / (6 + 0.5 * V))
+    assert toy.prob(["the"], "sat") > 0
+    assert toy.prob(["zebra"], "cat") > 0  # unknown context word -> <unk>, still a distribution
+
+
+@pytest.mark.parametrize("ctx", [["the"], ["sat"], ["zebra"], []])
+def test_smoothed_distributions_sum_to_one(toy, ctx):
+    assert sum(toy.prob(ctx, w) for w in toy.vocab) == pytest.approx(1.0)
+    assert sum(toy.witten_bell(ctx, w) for w in toy.vocab) == pytest.approx(1.0)
+
+
+def test_small_k_approaches_mle_and_perplexity_is_finite(toy):
+    toy.k = 1e-9
+    assert toy.prob(["the"], "cat") == pytest.approx(toy.mle(["the"], "cat"), rel=1e-6)
+    toy.k = 0.5
+    ppl = toy.perplexity(core.prepare("The cat sat on the rug. A zebra sat."))
+    assert math.isfinite(ppl) and ppl > 1
+
+
+def test_backoff_order_when_context_unseen():
+    m = core.NgramModel(n=3, min_count=1).fit(core.prepare(TOY))
+    assert m.best_order("the cat") == 3
+    assert m.best_order("rug cat") == 2  # ("rug","cat") never seen, ("cat",) was
+    assert m.best_order("zebra zebra") == 1
