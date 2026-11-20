@@ -195,3 +195,85 @@ class NgramModel:
                 log_sum += math.log(f(seq[:i], w))
                 N += 1
         return math.exp(-log_sum / max(N, 1))
+
+
+# ---------------------------------------------------------------------------
+# Milestone 4: generate text by sampling from the model.
+# ---------------------------------------------------------------------------
+def sample_next(model: NgramModel, prefix, rng: random.Random | None = None, temperature: float = 1.0,
+                top_k: int = 0, top_p: float = 1.0, smoothing: str = "addk") -> str:
+    """Pick the next token at random in proportion to its smoothed probability.
+
+    temperature  <1 sharper (safer), >1 flatter (wilder), 0 = always the most likely token
+    top_k        keep only the k most likely tokens (0 = all)
+    top_p        keep the smallest set of tokens whose probability adds up to p (nucleus)
+    """
+    rng = rng or random.Random()
+    dist, _ = model.distribution(prefix, smoothing)
+    dist.pop(UNK, None)
+    ranked = sorted(((w, p) for w, p in dist.items() if p > 0), key=lambda kv: (-kv[1], kv[0]))
+    if temperature <= 0:
+        return ranked[0][0]
+    if top_k > 0:
+        ranked = ranked[:top_k]
+    if top_p < 1.0:
+        kept, mass, total = [], 0.0, sum(p for _, p in ranked)
+        for w, p in ranked:
+            kept.append((w, p))
+            mass += p / total
+            if mass >= top_p:
+                break
+        ranked = kept
+    # p ** (1/T), in log space so tiny probabilities don't underflow
+    logs = [math.log(p) / temperature for _, p in ranked]
+    top = max(logs)
+    return rng.choices([w for w, _ in ranked], weights=[math.exp(l - top) for l in logs])[0]
+
+
+def generate(model: NgramModel, prefix: str = "", length: int = 15, seed: int | None = None, **sampling) -> list[str]:
+    """Sample `length` words after `prefix`. An end-of-sentence starts a fresh sentence,
+    so a suggestion can run across sentences. Punctuation doesn't count toward length."""
+    rng = random.Random(seed)
+    sents = split_sentences(prefix)
+    ctx = [] if _ended(prefix) or not sents else tokenize(sents[-1])
+    out: list[str] = []
+    words = guard = 0
+    while words < length and guard < length * 6:
+        guard += 1
+        w = sample_next(model, ctx, rng, **sampling)
+        if w in PUNCT and (not out or out[-1] in PUNCT):
+            if w in ENDS and out and out[-1] in PUNCT:
+                out[-1] = w  # "word:." -> "word."
+                ctx = []
+            continue
+        if w == EOS or w in ENDS:
+            if w in ENDS:
+                out.append(w)
+            elif out and out[-1] in PUNCT and out[-1] not in ENDS:
+                out[-1] = "."
+            elif out and out[-1] not in ENDS:
+                out.append(".")
+            ctx = []
+            continue
+        out.append(w)
+        ctx.append(w)
+        words += w not in PUNCT
+    return out
+
+
+def detokenize(tokens: list[str], capitalize_first: bool = False) -> str:
+    """Tokens -> readable text: punctuation hugs the word before it, "i" -> "I",
+    and words after . ! ? are capitalised."""
+    out, cap = [], capitalize_first
+    for t in tokens:
+        if t in PUNCT:
+            if out:
+                out[-1] += t
+            else:
+                out.append(t)
+            cap = t in ENDS
+            continue
+        w = "I" + t[1:] if t == "i" or t.startswith("i'") else t
+        out.append(w[:1].upper() + w[1:] if cap else w)
+        cap = False
+    return " ".join(out)

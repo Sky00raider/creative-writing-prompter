@@ -100,3 +100,34 @@ def test_backoff_order_when_context_unseen():
     assert m.best_order("the cat") == 3
     assert m.best_order("rug cat") == 2  # ("rug","cat") never seen, ("cat",) was
     assert m.best_order("zebra zebra") == 1
+
+
+# ---- Milestone 4: sampling -------------------------------------------------
+def test_sampling_is_reproducible_and_respects_length(toy):
+    a = core.generate(toy, "the", length=8, seed=3)
+    assert a == core.generate(toy, "the", length=8, seed=3)
+    assert sum(t not in core.PUNCT for t in a) == 8
+    assert all(t in toy.vocab for t in a)
+
+
+def test_greedy_and_top_k_pick_the_most_likely_word(toy):
+    rng = random.Random(0)
+    assert core.sample_next(toy, ["the"], rng, temperature=0) == "cat"
+    assert {core.sample_next(toy, ["the"], rng, top_k=1) for _ in range(20)} == {"cat"}
+
+
+def test_sampling_follows_the_probabilities(toy):
+    rng = random.Random(1)
+    draws = [core.sample_next(toy, ["the"], rng, top_k=0) for _ in range(4000)]
+    assert draws.count("cat") / 4000 == pytest.approx(toy.prob(["the"], "cat"), abs=0.03)
+
+
+def test_top_p_keeps_only_the_nucleus(toy):
+    rng = random.Random(2)
+    toy.k = 1e-6
+    got = {core.sample_next(toy, ["the"], rng, top_p=0.5) for _ in range(200)}
+    assert got <= {"cat", "dog"}  # cat 1/3 + dog 1/3 already covers half the mass
+
+
+def test_detokenize():
+    assert core.detokenize(["i", "said", ",", "no", ".", "then", "i'm", "off", "!"], True) == "I said, no. Then I'm off!"
