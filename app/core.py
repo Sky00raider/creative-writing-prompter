@@ -277,3 +277,74 @@ def detokenize(tokens: list[str], capitalize_first: bool = False) -> str:
         out.append(w[:1].upper() + w[1:] if cap else w)
         cap = False
     return " ".join(out)
+
+
+# ---------------------------------------------------------------------------
+# Milestone 5: what the CLI shows (suggestions, continuations, explanations).
+# ---------------------------------------------------------------------------
+def suggest(model: NgramModel, prefix: str, count: int = 5, explain: bool = False) -> list[dict]:
+    """The most likely next words (no punctuation or end markers), with where they come from."""
+    dist, order = model.distribution(prefix)
+    ctx = model.context(prefix, order)
+    seen = model.counts[order].get(ctx, Counter())
+    words = [w for w, _ in sorted(dist.items(), key=lambda kv: (-kv[1], kv[0]))
+             if w not in PUNCT and w not in (EOS, UNK, BOS)][:count]
+    out = []
+    for w in words:
+        item = {"word": w, "prob": dist[w], "order": order, "count": seen[w],
+                "context": [t for t in ctx if t != BOS]}
+        if explain:
+            item["example"] = find_example(model, item["context"] + [w])
+        out.append(item)
+    return out
+
+
+def find_example(model: NgramModel, phrase: list[str]) -> str | None:
+    """The shortest real corpus sentence containing the phrase, so a writer sees where a word came from."""
+    m = len(phrase)
+    if not m:
+        return None
+    best = None
+    for sent in model.sentences:
+        if best is not None and len(sent) >= len(best):
+            continue
+        if any(sent[i : i + m] == phrase for i in range(len(sent) - m + 1)):
+            best = sent  # keep the shortest sentence that uses the phrase
+    return detokenize(best, capitalize_first=True) if best else None
+
+
+def continue_text(model: NgramModel, prefix: str, length: int = 15, samples: int = 3,
+                  seed: int | None = None, **sampling) -> list[str]:
+    """`samples` different continuations of `prefix`, as readable text."""
+    return [detokenize(generate(model, prefix, length, None if seed is None else seed + i, **sampling),
+                       capitalize_first=_ended(prefix)) for i in range(samples)]
+
+
+def compare(prefix: str, genres: list[str] | None = None, length: int = 15, seed: int | None = 0,
+            n: int = 3, k: float = 0.01, **sampling) -> dict[str, str]:
+    """The same opening continued by every genre's model."""
+    return {g: continue_text(load_model(g, n, k), prefix, length, 1, seed, **sampling)[0]
+            for g in (genres or list_genres())}
+
+
+def load_model(genre: str, n: int = 3, k: float = 0.01, min_count: int = 2) -> NgramModel:
+    """Train on a genre, caching the counts in .cache/ so the next start is fast."""
+    files = [CORPUS_DIR / f"{g}.txt" for g in (list_genres() if genre == "all" else [genre])]
+    stamp = "-".join(f"{f.name}{f.stat().st_size}_{int(f.stat().st_mtime)}" for f in files if f.exists())
+    path = CACHE_DIR / f"{genre}-n{n}-m{min_count}-{zlib.crc32(stamp.encode()):08x}.pkl.gz"
+    if path.exists():
+        try:
+            with gzip.open(path, "rb") as fh:
+                model = pickle.load(fh)
+            model.k = k
+            return model
+        except Exception:
+            pass
+    model = NgramModel(n, k, min_count).fit(prepare(load_corpus(genre)))
+    try:
+        CACHE_DIR.mkdir(exist_ok=True)
+        with gzip.open(path, "wb", compresslevel=3) as fh:
+            pickle.dump(model, fh, protocol=pickle.HIGHEST_PROTOCOL)
+    except OSError:
+        pass
+    return model

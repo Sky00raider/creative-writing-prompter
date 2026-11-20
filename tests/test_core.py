@@ -131,3 +131,41 @@ def test_top_p_keeps_only_the_nucleus(toy):
 
 def test_detokenize():
     assert core.detokenize(["i", "said", ",", "no", ".", "then", "i'm", "off", "!"], True) == "I said, no. Then I'm off!"
+
+
+# ---- Milestone 5: suggestions and the CLI ---------------------------------
+def test_suggest_explains_where_words_come_from(toy):
+    s = core.suggest(toy, "the", count=3, explain=True)
+    assert s[0]["word"] == "cat" and s[0]["count"] == 2 and s[0]["order"] == 2
+    assert s[0]["example"] == "The cat ran away!"  # shortest sentence containing "the cat"
+    assert all(i["word"] not in core.PUNCT for i in s)
+
+
+def test_cli_suggest_continue_and_compare(toy, monkeypatch, capsys):
+    monkeypatch.setattr(core, "load_model", lambda *a, **k: toy)
+    monkeypatch.setattr(core, "list_genres", lambda: ["toyA", "toyB"])
+    cli.main(["suggest", "the", "--explain"])
+    out = capsys.readouterr().out
+    assert "1. cat" in out and "2-gram" in out
+    cli.main(["continue", "the", "--length", "5", "--seed", "1", "--samples", "2"])
+    assert capsys.readouterr().out.count(">>") == 2
+    cli.main(["compare", "the", "cat"])
+    out = capsys.readouterr().out
+    assert "toyA" in out and "toyB" in out
+
+
+def test_cli_reports_unknown_genre(capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["suggest", "hello", "--genre", "no-such-genre"])
+    assert "unknown genre" in capsys.readouterr().err
+
+
+def test_writing_session(toy, monkeypatch, tmp_path):
+    monkeypatch.setattr(core, "load_model", lambda *a, **k: toy)
+    store = Store(str(tmp_path / "drafts.json"))
+    script = iter(["the", "1", "sat", "/undo", "/more 3", "/save mine", "/quit"])
+    lines = []
+    draft = cli.run_session("toy", input_fn=lambda _: next(script), out=lines.append, store=store, seed=0)
+    assert draft.startswith("the cat ")
+    assert len(draft.split()) >= 5
+    assert store.get("mine")["text"] == draft
