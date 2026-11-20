@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="852" height="423" viewBox="0 0 852 423">
+<rect width="852" height="423" rx="10" fill="#1e1e2e"/>
+<circle cx="20" cy="18" r="6" fill="#f38ba8"/><circle cx="40" cy="18" r="6" fill="#f9e2af"/><circle cx="60" cy="18" r="6" fill="#a6e3a1"/>
+<g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" xml:space="preserve">
+<text x="18" y="44" fill="#89b4fa">$ python -m app.cli suggest "my dear" --genre mystery --count 3</text>
+<text x="18" y="63" fill="#cdd6f4">  1. watson   24.5%</text>
+<text x="18" y="82" fill="#cdd6f4">  2. fellow   13.4%</text>
+<text x="18" y="101" fill="#cdd6f4">  3. sir       5.6%</text>
+<text x="18" y="120" fill="#cdd6f4"></text>
+<text x="18" y="139" fill="#89b4fa">$ python -m app.cli suggest "the old house at the end of the" -g horror --explain --count 2</text>
+<text x="18" y="158" fill="#cdd6f4">  1. house    0.9%   seen 29x after "of the" [3-gram]</text>
+<text x="18" y="177" fill="#a6adc8">       e.g. Of course it was in the rear of the house.</text>
+<text x="18" y="196" fill="#cdd6f4">  2. most     0.9%   seen 28x after "of the" [3-gram]</text>
+<text x="18" y="215" fill="#a6adc8">       e.g. His family was one of the most illustrious of the empire.</text>
+<text x="18" y="234" fill="#cdd6f4"></text>
+<text x="18" y="253" fill="#89b4fa">$ python -m app.cli compare "the door opened slowly and" --length 14</text>
+<text x="18" y="272" fill="#cdd6f4">"the door opened slowly and" ...</text>
+<text x="18" y="291" fill="#cdd6f4"></text>
+<text x="18" y="310" fill="#cdd6f4">adventure   ponderingly. The stranger man for a while the whale, and that night, shouting abroad</text>
+<text x="18" y="329" fill="#cdd6f4">fairy_tale  so bitterly, but they could get in? He walked nearer than a flower pot</text>
+<text x="18" y="348" fill="#cdd6f4">horror      steadily down, and that, having caught a glimpse, I am detailing any mystery. If</text>
+<text x="18" y="367" fill="#cdd6f4">humour      wearily into the gooseberry garden, for instance, I really. I can ask the hall</text>
+<text x="18" y="386" fill="#cdd6f4">mystery     solemnly he was a good deal in this matter is the best of his</text>
+</g>
+</svg>

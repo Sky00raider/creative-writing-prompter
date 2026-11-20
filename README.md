@@ -8,6 +8,10 @@ humour). It suggests the next words for your text, continues it, compares genres
 suggestion with a real sentence from the corpus. An interactive writing session lets you build a draft word by word
 and save it.
 
+![Suggestions, an explained suggestion, and one opening continued in five genres](docs/demo.svg)
+
+<sub>Real output, rendered by `python scripts/render_demo.py`.</sub>
+
 ## Milestones
 
 - [x] **1. Prepare a text corpus of short stories.**
@@ -189,9 +193,11 @@ app/
   storage.py     saved drafts (data/app.json)
   llm.py         starter file, unused
 corpus/          one cleaned .txt per genre (committed)
+docs/demo.svg    terminal demo shown at the top of this README
 scripts/
   build_corpus.py  download and clean the books from Project Gutenberg
   evaluate.py      held-out perplexity experiments
+  render_demo.py   runs the CLI and draws docs/demo.svg
 results/
   results.md     perplexity table
 tests/
